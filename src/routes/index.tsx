@@ -73,82 +73,55 @@ function Index() {
   const rafRef = useRef<number | null>(null);
   const lastTsRef = useRef<number>(0);
 
-  // Scroll-driven video playback — reacts to scroll velocity with inertia.
-  // Forward motion uses native video playback; reverse uses tiny exact seeks.
+  // Scroll-driven video playback — mapped directly to scroll position with smooth interpolation.
+  // Plays forward on scroll down, backward on scroll up.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-    const maxScroll = () => Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-    const movementScale = () => ((durationRef.current || 1) / maxScroll()) * 4.5;
+    let targetTime = 0;
+    let currentTime = 0;
+    let rafId: number;
 
-    const setVideoTime = (time: number) => {
-      try { video.currentTime = time; } catch { /* ignore seek races */ }
-    };
+    const tick = () => {
+      const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      const scrollProgress = Math.max(0, Math.min(1, window.scrollY / maxScroll));
+      
+      const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
+      
+      if (duration > 0) {
+        // Map total scroll directly to the video's full duration
+        targetTime = scrollProgress * duration;
 
-    const captureScrollImpulse = () => {
-      const scrollY = window.scrollY || 0;
-      const delta = scrollY - lastScrollYRef.current;
-      lastScrollYRef.current = scrollY;
-      if (!durationRef.current || Math.abs(delta) < 0.5) return;
+        // Lerp for buttery smooth catch-up
+        currentTime += (targetTime - currentTime) * 0.07;
 
-      const impulse = delta * movementScale();
-      scrollVelocityRef.current = clamp(scrollVelocityRef.current + impulse, -1.6, 1.6);
-    };
-
-    const tick = (ts: number) => {
-      const dt = lastTsRef.current ? (ts - lastTsRef.current) / 1000 : 0.016;
-      lastTsRef.current = ts;
-
-      const duration = durationRef.current;
-      const maxTime = Math.max(0, duration - 0.08);
-      const velocity = scrollVelocityRef.current;
-
-      if (duration > 0 && Math.abs(velocity) >= 0.012) {
-        if (velocity > 0 && Math.abs(video.currentTime - videoTimeRef.current) < 0.28) {
-          video.playbackRate = clamp(velocity, 0.35, 1.35);
-          if (video.paused) video.play().catch(() => {});
-          videoTimeRef.current = clamp(video.currentTime || videoTimeRef.current, 0, maxTime);
-        } else {
-          if (!video.paused) video.pause();
-          const next = clamp(videoTimeRef.current + velocity * dt, 0, maxTime);
-          videoTimeRef.current = next;
-          if (Math.abs(video.currentTime - next) > 0.006) setVideoTime(next);
+        if (Math.abs(video.currentTime - currentTime) > 0.01) {
+          if (!video.paused) {
+            video.pause();
+          }
+          try {
+            video.currentTime = currentTime;
+          } catch {
+            // ignore seek errors
+          }
         }
-
-        scrollVelocityRef.current *= Math.exp(-dt * 4.5);
-      } else {
-        scrollVelocityRef.current = 0;
-        if (!video.paused) video.pause();
-        videoTimeRef.current = clamp(video.currentTime || videoTimeRef.current, 0, maxTime);
       }
 
-      rafRef.current = requestAnimationFrame(tick);
+      rafId = requestAnimationFrame(tick);
     };
 
     const onMeta = () => {
-      durationRef.current = Number.isFinite(video.duration) ? video.duration : 0;
-      video.pause();
-      videoTimeRef.current = video.currentTime || 0;
-      lastScrollYRef.current = window.scrollY || 0;
-      if (rafRef.current == null) {
-        lastTsRef.current = 0;
-        rafRef.current = requestAnimationFrame(tick);
-      }
+      currentTime = video.currentTime || 0;
+      if (!rafId) rafId = requestAnimationFrame(tick);
     };
+
     if (video.readyState >= 1) onMeta();
     else video.addEventListener("loadedmetadata", onMeta);
 
-    window.addEventListener("scroll", captureScrollImpulse, { passive: true });
-    window.addEventListener("resize", captureScrollImpulse);
-
     return () => {
-      window.removeEventListener("scroll", captureScrollImpulse);
-      window.removeEventListener("resize", captureScrollImpulse);
       video.removeEventListener("loadedmetadata", onMeta);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
+      if (rafId) cancelAnimationFrame(rafId);
     };
   }, []);
 
@@ -229,18 +202,18 @@ function Index() {
         <div className="w-full h-full flex flex-col items-center justify-center transition-transform duration-75" style={{ opacity: heroOpacity, transform: `translateY(${heroTranslateY}px)` }}>
 
         {/* Floating Elements (Refined) - Visible on all screens */}
-        <div className="absolute inset-0 pointer-events-none z-10">
-          <div className="absolute top-[28%] right-[18%] w-10 h-8 md:w-16 md:h-12 bg-white/70 backdrop-blur-md rounded-xl p-1 shadow-xl rotate-[-8deg] animate-[bounce_6s_infinite]">
-            <img src="https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=200" className="w-full h-full object-cover rounded-lg" alt="Plane" />
+        <div className="absolute inset-0 pointer-events-none z-10 opacity-70 md:opacity-100">
+          <div className="absolute top-[20%] right-[10%] w-20 h-28 md:w-32 md:h-40 bg-white/80 backdrop-blur-md rounded-2xl p-1.5 md:p-2 shadow-2xl rotate-[-6deg] animate-[bounce_6s_infinite]">
+            <img src="/dest-istanbul.jpg" className="w-full h-full object-cover rounded-xl shadow-inner" alt="Istanbul" />
           </div>
-          <div className="absolute top-[38%] right-[5%] w-9 h-8 md:w-14 md:h-10 bg-white/70 backdrop-blur-md rounded-xl p-1 shadow-xl rotate-[12deg] animate-[bounce_5s_infinite_reverse]">
-            <img src="https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=200" className="w-full h-full object-cover rounded-lg" alt="Sky" />
+          <div className="absolute top-[40%] right-[3%] w-16 h-20 md:w-28 md:h-36 bg-white/80 backdrop-blur-md rounded-2xl p-1 md:p-2 shadow-2xl rotate-[8deg] animate-[bounce_5s_infinite_reverse]">
+            <img src="/dest-riyadh.jpg" className="w-full h-full object-cover rounded-xl shadow-inner" alt="Riyadh" />
           </div>
-          <div className="absolute top-[32%] left-[18%] w-9 h-8 md:w-14 md:h-12 bg-white/70 backdrop-blur-md rounded-xl p-1 shadow-xl rotate-[6deg] animate-[bounce_7s_infinite]">
-            <img src="https://images.unsplash.com/photo-1517400508447-f8dd518b86db?w=200" className="w-full h-full object-cover rounded-lg" alt="Travel" />
+          <div className="absolute top-[25%] left-[10%] w-24 h-32 md:w-36 md:h-48 bg-white/80 backdrop-blur-md rounded-2xl p-1.5 md:p-2.5 shadow-2xl rotate-[5deg] animate-[bounce_7s_infinite]">
+            <img src="/dest-mecca-card.jpg" className="w-full h-full object-cover rounded-xl shadow-inner" alt="Mecca" />
           </div>
-          <div className="absolute top-[48%] left-[5%] w-10 h-8 md:w-16 md:h-12 bg-white/70 backdrop-blur-md rounded-xl p-1 shadow-xl rotate-[-12deg] animate-[bounce_8s_infinite_reverse]">
-            <img src="https://images.unsplash.com/photo-1464037866556-6812c9d1c72e?w=200" className="w-full h-full object-cover rounded-lg" alt="Destination" />
+          <div className="absolute top-[50%] left-[4%] w-20 h-28 md:w-32 md:h-40 bg-white/80 backdrop-blur-md rounded-2xl p-1.5 md:p-2 shadow-2xl rotate-[-8deg] animate-[bounce_8s_infinite_reverse]">
+            <img src="/dest-muscat.jpg" className="w-full h-full object-cover rounded-xl shadow-inner" alt="Muscat" />
           </div>
         </div>
 
@@ -334,16 +307,16 @@ function Index() {
               
               <div className="mt-12 grid gap-x-8 gap-y-20 sm:grid-cols-2 lg:grid-cols-4 pb-16">
                 {[
-                  { name: "إسطنبول، تركيا", img: "/dest-istanbul.jpg", cls: "lg:-translate-y-6 -rotate-6" },
-                  { name: "مسقط، عُمان", img: "/dest-muscat.jpg", cls: "lg:translate-y-16 rotate-3" },
-                  { name: "الرياض، السعودية", img: "/dest-riyadh.jpg", cls: "lg:-translate-y-2 -rotate-3" },
-                  { name: "القاهرة، مصر", img: "/dest-cairo.jpg", cls: "lg:translate-y-24 rotate-6" },
+                  { name: "إسطنبول، تركيا", img: "/dest-istanbul.jpg", cls: "lg:translate-y-0 lg:-rotate-2" },
+                  { name: "مسقط، عُمان", img: "/dest-muscat.jpg", cls: "lg:translate-y-8 lg:rotate-2" },
+                  { name: "الرياض، السعودية", img: "/dest-riyadh.jpg", cls: "lg:translate-y-8 lg:-rotate-2" },
+                  { name: "القاهرة، مصر", img: "/dest-cairo.jpg", cls: "lg:translate-y-0 lg:rotate-2" },
                 ].map((dest, i) => (
-                  <div key={i} className={`group relative bg-white/40 backdrop-blur-md border border-white/50 p-3 pb-12 transition-all duration-500 hover:scale-110 hover:z-20 ${dest.cls}`}>
-                    <div className="aspect-[4/5] overflow-hidden bg-gray-100">
-                      <img src={dest.img} alt={dest.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                  <div key={i} className={`group relative bg-white/90 backdrop-blur-xl border border-white shadow-2xl rounded-2xl p-3 pb-16 transition-all duration-500 hover:-translate-y-4 hover:scale-105 hover:z-20 ${dest.cls}`}>
+                    <div className="aspect-[4/5] overflow-hidden rounded-xl bg-gray-100 shadow-inner">
+                      <img src={dest.img} alt={dest.name} className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110" />
                     </div>
-                    <p className="absolute bottom-4 left-0 right-0 text-center text-lg font-medium" style={{ color: "#202A36" }}>{dest.name}</p>
+                    <p className="absolute bottom-5 left-0 right-0 text-center text-lg font-bold" style={{ color: "#202A36" }}>{dest.name}</p>
                   </div>
                 ))}
               </div>
