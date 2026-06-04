@@ -73,55 +73,82 @@ function Index() {
   const rafRef = useRef<number | null>(null);
   const lastTsRef = useRef<number>(0);
 
-  // Scroll-driven video playback — mapped directly to scroll position with smooth interpolation.
-  // Plays forward on scroll down, backward on scroll up.
+  // Scroll-driven video playback — reacts to scroll velocity with inertia.
+  // Forward motion uses native video playback; reverse uses tiny exact seeks.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    let targetTime = 0;
-    let currentTime = 0;
-    let rafId: number;
+    const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+    const maxScroll = () => Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+    const movementScale = () => ((durationRef.current || 1) / maxScroll()) * 4.5;
 
-    const tick = () => {
-      const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-      const scrollProgress = Math.max(0, Math.min(1, window.scrollY / maxScroll));
-      
-      const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
-      
-      if (duration > 0) {
-        // Map total scroll directly to the video's full duration
-        targetTime = scrollProgress * duration;
+    const setVideoTime = (time: number) => {
+      try { video.currentTime = time; } catch { /* ignore seek races */ }
+    };
 
-        // Lerp for buttery smooth catch-up
-        currentTime += (targetTime - currentTime) * 0.07;
+    const captureScrollImpulse = () => {
+      const scrollY = window.scrollY || 0;
+      const delta = scrollY - lastScrollYRef.current;
+      lastScrollYRef.current = scrollY;
+      if (!durationRef.current || Math.abs(delta) < 0.5) return;
 
-        if (Math.abs(video.currentTime - currentTime) > 0.01) {
-          if (!video.paused) {
-            video.pause();
-          }
-          try {
-            video.currentTime = currentTime;
-          } catch {
-            // ignore seek errors
-          }
+      const impulse = delta * movementScale();
+      scrollVelocityRef.current = clamp(scrollVelocityRef.current + impulse, -1.6, 1.6);
+    };
+
+    const tick = (ts: number) => {
+      const dt = lastTsRef.current ? (ts - lastTsRef.current) / 1000 : 0.016;
+      lastTsRef.current = ts;
+
+      const duration = durationRef.current;
+      const maxTime = Math.max(0, duration - 0.08);
+      const velocity = scrollVelocityRef.current;
+
+      if (duration > 0 && Math.abs(velocity) >= 0.012) {
+        if (velocity > 0 && Math.abs(video.currentTime - videoTimeRef.current) < 0.28) {
+          video.playbackRate = clamp(velocity, 0.35, 1.35);
+          if (video.paused) video.play().catch(() => {});
+          videoTimeRef.current = clamp(video.currentTime || videoTimeRef.current, 0, maxTime);
+        } else {
+          if (!video.paused) video.pause();
+          const next = clamp(videoTimeRef.current + velocity * dt, 0, maxTime);
+          videoTimeRef.current = next;
+          if (Math.abs(video.currentTime - next) > 0.006) setVideoTime(next);
         }
+
+        scrollVelocityRef.current *= Math.exp(-dt * 4.5);
+      } else {
+        scrollVelocityRef.current = 0;
+        if (!video.paused) video.pause();
+        videoTimeRef.current = clamp(video.currentTime || videoTimeRef.current, 0, maxTime);
       }
 
-      rafId = requestAnimationFrame(tick);
+      rafRef.current = requestAnimationFrame(tick);
     };
 
     const onMeta = () => {
-      currentTime = video.currentTime || 0;
-      if (!rafId) rafId = requestAnimationFrame(tick);
+      durationRef.current = Number.isFinite(video.duration) ? video.duration : 0;
+      video.pause();
+      videoTimeRef.current = video.currentTime || 0;
+      lastScrollYRef.current = window.scrollY || 0;
+      if (rafRef.current == null) {
+        lastTsRef.current = 0;
+        rafRef.current = requestAnimationFrame(tick);
+      }
     };
-
     if (video.readyState >= 1) onMeta();
     else video.addEventListener("loadedmetadata", onMeta);
 
+    window.addEventListener("scroll", captureScrollImpulse, { passive: true });
+    window.addEventListener("resize", captureScrollImpulse);
+
     return () => {
+      window.removeEventListener("scroll", captureScrollImpulse);
+      window.removeEventListener("resize", captureScrollImpulse);
       video.removeEventListener("loadedmetadata", onMeta);
-      if (rafId) cancelAnimationFrame(rafId);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
     };
   }, []);
 
