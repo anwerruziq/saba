@@ -3,7 +3,7 @@
 @import "tw-animate-css";
 
 body {
-  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  font-family: "Cairo", system-ui, -apple-system, sans-serif;
 }
 
 @custom-variant dark (&:is(.dark *));
@@ -23,6 +23,7 @@ body {
  */
 
 @theme inline {
+  --font-sans: "Cairo", ui-sans-serif, system-ui, sans-serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
