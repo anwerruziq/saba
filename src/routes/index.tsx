@@ -1,7 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
-import { Menu, X, Plane, Clock, Shield, Star, ChevronDown } from "lucide-react";
+import { Menu, X, Plane, Clock, Shield, Star, ChevronDown, RefreshCw } from "lucide-react";
 import logo from "../assets/logo.png";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "../components/ui/dialog";
 
 export const Route = createFileRoute("/")(({
   head: () => ({
@@ -50,6 +57,246 @@ const RevealOnScroll = ({ children, className = "", delay = 0 }: { children: Rea
     </div>
   );
 };
+
+const IATA_CITY: Record<string, string> = {
+  "SAH": "صنعاء", "AMM": "عمّان", "JED": "جدة", "ADE": "عدن",
+  "CAI": "القاهرة", "IST": "إسطنبول", "MCT": "مسقط", "RUH": "الرياض",
+  "DXB": "دبي", "KWI": "الكويت", "BAH": "البحرين", "DOH": "الدوحة",
+  "GYD": "باكو", "BEY": "بيروت", "DAM": "دمشق", "BGW": "بغداد",
+  "TUN": "تونس", "ALG": "الجزائر", "CMN": "الدار البيضاء",
+  "HBE": "الإسكندرية", "LHR": "لندن", "CDG": "باريس", "FRA": "فرانكفورت",
+  "ADD": "أديس أبابا", "NBO": "نيروبي", "TIF": "الطائف", "MED": "المدينة المنورة",
+  "ABT": "الباحة", "AHB": "أبها", "TUF": "تبوك", "BHH": "بيشة",
+  "GIZ": "جيزان", "HOF": "الهفوف", "RAE": "عرعر",
+  "SHA": "شنغهاي", "PEK": "بكين", "SIN": "سنغافورة", "BOM": "مومباي",
+  "DEL": "دلهي", "KHI": "كراتشي", "MNL": "مانيلا", "BKK": "بانكوك",
+  "AUH": "أبوظبي", "SHJ": "الشارقة", "FJR": "الفجيرة",
+};
+
+const statusLabel = (s: string) => {
+  if (s === "en-route")  return { label: "في الجو",   color: "bg-emerald-100 text-emerald-700" };
+  if (s === "landed")    return { label: "هبطت",      color: "bg-blue-100   text-blue-700"    };
+  if (s === "scheduled") return { label: "مجدولة",    color: "bg-amber-100  text-amber-700"   };
+  return                        { label: s,            color: "bg-gray-100   text-gray-600"    };
+};
+
+const ARAB_AIRLINES = [
+  { iata: "IY", name: "سبأ للطيران",         flag: "🇾🇪" },
+  { iata: "EK", name: "طيران الإمارات",       flag: "🇦🇪" },
+  { iata: "EY", name: "الاتحاد للطيران",     flag: "🇦🇪" },
+  { iata: "FZ", name: "فلاي دبي",            flag: "🇦🇪" },
+  { iata: "G9", name: "العربية للطيران",      flag: "🇦🇪" },
+  { iata: "QR", name: "القطرية",              flag: "🇶🇦" },
+  { iata: "SV", name: "الخطوط السعودية",     flag: "🇸🇦" },
+  { iata: "XY", name: "فلاي ناس",            flag: "🇸🇦" },
+  { iata: "WY", name: "عُمان للطيران",        flag: "🇴🇲" },
+  { iata: "GF", name: "طيران الخليج",        flag: "🇧🇭" },
+  { iata: "KU", name: "الخطوط الكويتية",    flag: "🇰🇼" },
+  { iata: "J9", name: "طيران الجزيرة",       flag: "🇰🇼" },
+  { iata: "MS", name: "مصر للطيران",         flag: "🇪🇬" },
+  { iata: "RJ", name: "الملكية الأردنية",    flag: "🇯🇴" },
+  { iata: "ME", name: "الشرق الأوسط",        flag: "🇱🇧" },
+  { iata: "IA", name: "الخطوط العراقية",     flag: "🇮🇶" },
+  { iata: "8U", name: "أفريقية",              flag: "🇱🇾" },
+  { iata: "TU", name: "تونيسار",             flag: "🇹🇳" },
+];
+
+const API_KEY = "779b3cae-16bb-4765-bb6c-6af70f958986";
+const flightCache: Record<string, { data: any[]; ts: number }> = {};
+
+function FlightTable() {
+  const [activeAirline, setActiveAirline]     = useState(ARAB_AIRLINES[0]);
+  const [flights, setFlights]                 = useState<any[]>([]);
+  const [loading, setLoading]                 = useState(false);
+  const [lastUpdated, setLastUpdated]         = useState<Date | null>(null);
+  const [selectedFlight, setSelectedFlight]   = useState<any>(null);
+  const [error, setError]                     = useState<string | null>(null);
+
+  const fetchFlights = (airline: typeof ARAB_AIRLINES[0], force = false) => {
+    const cached = flightCache[airline.iata];
+    if (!force && cached && Date.now() - cached.ts < 5 * 60 * 1000) {
+      setFlights(cached.data);
+      setLastUpdated(new Date(cached.ts));
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setSelectedFlight(null);
+    fetch(`https://airlabs.co/api/v9/flights?api_key=${API_KEY}&airline_iata=${airline.iata}`)
+      .then(r => r.json())
+      .then(data => {
+        const list = data?.response ?? [];
+        flightCache[airline.iata] = { data: list, ts: Date.now() };
+        setFlights(list);
+        setLastUpdated(new Date());
+        setLoading(false);
+      })
+      .catch(() => { setError("تعذّر الاتصال بالخادم."); setLoading(false); });
+  };
+
+  useEffect(() => { fetchFlights(activeAirline); }, [activeAirline]);
+
+  const now = new Date().toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" });
+
+  return (
+    <div className="w-full flex flex-col gap-3" dir="rtl">
+
+      {/* Airline tabs — scrollable */}
+      <div
+        className="flex gap-1.5 overflow-x-auto pb-1"
+        style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" } as React.CSSProperties}
+      >
+        {ARAB_AIRLINES.map(a => (
+          <button
+            key={a.iata}
+            onClick={() => setActiveAirline(a)}
+            className={`flex-none flex items-center gap-1 px-3 py-1.5 rounded-full text-[10px] font-bold border transition-all whitespace-nowrap ${
+              activeAirline.iata === a.iata
+                ? "bg-[#202A36] text-white border-[#202A36] shadow-md"
+                : "bg-white/50 text-[#202A36] border-white/40 hover:bg-white/70"
+            }`}
+          >
+            <span className="text-sm leading-none">{a.flag}</span>
+            <span>{a.name}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-black text-[#202A36]">
+            {activeAirline.flag} {activeAirline.name}
+          </h2>
+          <p className="text-[10px] text-gray-600 mt-0.5 font-medium">
+            {lastUpdated
+              ? `آخر تحديث: ${lastUpdated.toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}`
+              : "جارٍ التحميل..."}
+          </p>
+        </div>
+        <button
+          onClick={() => fetchFlights(activeAirline, true)}
+          className="flex items-center gap-1.5 bg-white/60 backdrop-blur-md border border-white/50 rounded-full px-3 py-1.5 text-[10px] font-bold text-[#202A36] hover:bg-white/80 transition-all shadow-sm"
+        >
+          <RefreshCw size={10} className={loading ? "animate-spin" : ""} /> تحديث
+        </button>
+      </div>
+
+      {/* Live badge */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-700 bg-emerald-50/80 border border-emerald-200 px-2.5 py-1 rounded-full">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          مباشر — {now}
+        </span>
+        {!loading && (
+          <span className="text-[10px] text-gray-600 font-semibold">{flights.length} رحلة نشطة</span>
+        )}
+      </div>
+
+      {/* Content area */}
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-12 gap-3">
+          <div className="w-9 h-9 rounded-full border-4 border-[#202A36]/20 border-t-[#202A36] animate-spin" />
+          <p className="text-sm font-bold text-gray-700">جارٍ تحميل رحلات {activeAirline.name}...</p>
+        </div>
+      ) : error ? (
+        <div className="flex flex-col items-center justify-center py-12 gap-2">
+          <p className="text-sm font-bold text-red-500">{error}</p>
+          <button
+            onClick={() => fetchFlights(activeAirline, true)}
+            className="text-xs underline text-[#202A36] font-bold"
+          >
+            إعادة المحاولة
+          </button>
+        </div>
+      ) : flights.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 gap-2">
+          <Plane className="text-gray-300" size={36} />
+          <p className="text-sm font-bold text-gray-500">لا توجد رحلات نشطة حالياً</p>
+          <p className="text-[10px] text-gray-400">جرّب شركة طيران أخرى أو أعد التحديث</p>
+        </div>
+      ) : (
+        <div
+          className="space-y-2 overflow-y-auto pr-1"
+          style={{ maxHeight: "60vh", scrollbarWidth: "thin" }}
+        >
+          {flights.map((f: any, i: number) => {
+            const dep     = f.dep_iata || "---";
+            const arr     = f.arr_iata || "---";
+            const depName = IATA_CITY[dep] || dep;
+            const arrName = IATA_CITY[arr] || arr;
+            const st      = statusLabel(f.status || "en-route");
+            const isSel   = selectedFlight?.flight_iata === f.flight_iata;
+
+            return (
+              <button
+                key={i}
+                onClick={() => setSelectedFlight(isSel ? null : f)}
+                className={`w-full text-right rounded-xl border transition-all duration-200 overflow-hidden ${
+                  isSel
+                    ? "bg-[#202A36]/10 border-[#202A36]/30 shadow-md"
+                    : "bg-white/40 border-white/40 hover:bg-white/60"
+                }`}
+              >
+                {/* Row */}
+                <div className="flex items-center justify-between px-3.5 py-2.5 gap-2">
+                  {/* Flight # */}
+                  <div className="flex flex-col items-start min-w-[60px]">
+                    <span className="text-[11px] font-black text-[#202A36]">{f.flight_iata}</span>
+                    <span className="text-[9px] text-gray-500 font-semibold mt-0.5">{f.aircraft_icao || "---"}</span>
+                  </div>
+
+                  {/* Route */}
+                  <div className="flex items-center gap-1.5 flex-1 justify-center min-w-0">
+                    <div className="flex flex-col items-center">
+                      <span className="text-xs font-black text-[#202A36]">{dep}</span>
+                      <span className="text-[8px] text-gray-600 font-semibold max-w-[40px] truncate">{depName}</span>
+                    </div>
+                    <div className="flex-1 px-1 relative flex items-center justify-center min-w-[24px]">
+                      <div className="absolute w-full border-t border-dashed border-gray-400/60" />
+                      <Plane size={10} className="text-[#202A36] -rotate-90 z-10" />
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <span className="text-xs font-black text-[#202A36]">{arr}</span>
+                      <span className="text-[8px] text-gray-600 font-semibold max-w-[40px] truncate">{arrName}</span>
+                    </div>
+                  </div>
+
+                  {/* Status */}
+                  <div className="flex flex-col items-end gap-1 min-w-[56px]">
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${st.color}`}>{st.label}</span>
+                    {f.alt > 0 && (
+                      <span className="text-[8px] text-gray-500">{Math.round(f.alt * 3.281).toLocaleString()} ft</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Expanded details */}
+                {isSel && (
+                  <div className="px-4 pb-4 pt-1 border-t border-white/40 bg-white/20 grid grid-cols-3 gap-3 text-center">
+                    {[
+                      ["الارتفاع",      f.alt   ? `${f.alt.toLocaleString()} م` : "---"],
+                      ["السرعة",        f.speed ? `${Math.round(f.speed)} كم/س` : "---"],
+                      ["الاتجاه",       f.dir   ? `${f.dir}°`                   : "---"],
+                      ["رقم الرحلة",    f.flight_iata   || "---"],
+                      ["تسجيل الطائرة", f.reg_number    || "---"],
+                      ["نوع الطائرة",   f.aircraft_icao || "---"],
+                    ].map(([label, val]) => (
+                      <div key={label}>
+                        <div className="text-[9px] text-gray-500 font-bold uppercase">{label}</div>
+                        <div className="text-[11px] font-black text-[#202A36] mt-0.5">{val}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Index() {
   const [open, setOpen] = useState(false);
@@ -284,10 +531,125 @@ function Index() {
               <span className="text-sm font-semibold text-[#1a2229]"><i className='bx bx-user mr-1'></i> 05</span>
             </div>
 
-            <div className="w-full md:w-auto p-1.5">
-              <button className="w-full md:w-auto bg-[#1a2229] text-white rounded-full px-8 py-3.5 text-sm font-medium hover:bg-black transition-colors shadow-lg">
-                احجز الآن
-              </button>
+            <div className="w-full md:w-auto p-1.5 flex flex-row gap-2">
+              <Dialog>
+                <DialogTrigger asChild>
+                  <button className="flex-1 md:flex-none w-full md:w-auto bg-white/40 text-[#1a2229] border border-white/50 rounded-full px-5 py-3.5 text-sm font-bold hover:bg-white/60 transition-colors shadow-sm">
+                    جدول الرحلات
+                  </button>
+                </DialogTrigger>
+                <DialogContent
+                  className="w-full sm:max-w-3xl bg-white/30 backdrop-blur-3xl border border-white/50 shadow-2xl p-4 sm:p-6"
+                  dir="rtl"
+                >
+                  <DialogHeader className="pb-4">
+                    <DialogTitle className="flex items-center gap-3 text-xl font-black" style={{ color: "#202A36" }}>
+                      <img src={logo} className="h-7 w-auto" alt="سبأ" />
+                      جدول رحلات الطيران
+                    </DialogTitle>
+                  </DialogHeader>
+                  <FlightTable />
+                </DialogContent>
+              </Dialog>
+
+              <Dialog>
+                <DialogTrigger asChild>
+                  <button className="flex-1 md:flex-none w-full md:w-auto bg-[#1a2229] text-white rounded-full px-8 py-3.5 text-sm font-medium hover:bg-black transition-colors shadow-lg whitespace-nowrap">
+                    احجز الآن
+                  </button>
+                </DialogTrigger>
+                <DialogContent className="w-full sm:max-w-lg bg-white/30 backdrop-blur-2xl border border-white/40 shadow-2xl overflow-y-auto" dir="rtl">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-3 text-xl font-black" style={{ color: "#202A36" }}>
+                      <img src={logo} className="h-7 w-auto" alt="سبأ" />
+                      تفاصيل الحجز
+                    </DialogTitle>
+                  </DialogHeader>
+                  
+                  <div className="mt-2 space-y-4">
+                    {/* Flight summary card */}
+                    <div className="rounded-2xl bg-white/40 backdrop-blur-md border border-white/50 p-4 shadow-sm relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-white/20 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+                      
+                      <div className="flex justify-between items-center mb-4">
+                        <span className="bg-[#202A36] text-white text-[10px] px-2.5 py-1 rounded-full font-bold shadow-sm">
+                          مباشرة
+                        </span>
+                        <span className="text-sm font-black text-[#202A36]">IY 640</span>
+                      </div>
+                      
+                      <div className="flex items-center justify-between relative">
+                        <div className="flex flex-col text-right z-10">
+                          <span className="text-2xl font-black text-[#202A36] drop-shadow-sm">08:30</span>
+                          <span className="text-xs font-bold text-gray-700 mt-0.5">صنعاء (SAH)</span>
+                        </div>
+                        
+                        <div className="flex-1 flex flex-col items-center justify-center px-4 relative z-10">
+                          <div className="text-[10px] text-gray-600 font-bold mb-1 bg-white/50 px-2 py-0.5 rounded-full backdrop-blur-sm">2h 45m</div>
+                          <div className="w-full flex items-center">
+                            <div className="w-2 h-2 rounded-full bg-[#202A36] shadow-[0_0_8px_rgba(32,42,54,0.5)]"></div>
+                            <div className="flex-1 border-t-2 border-dashed border-[#202A36]/30"></div>
+                            <div className="w-2 h-2 rounded-full border-2 border-[#202A36] bg-white"></div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex flex-col text-left z-10">
+                          <span className="text-2xl font-black text-[#202A36] drop-shadow-sm">11:15</span>
+                          <span className="text-xs font-bold text-gray-700 mt-0.5">عمّان (AMM)</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-2xl bg-white/40 backdrop-blur-md border border-white/50 p-3 shadow-sm flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-white/60 flex items-center justify-center shadow-inner">
+                          <i className='bx bx-briefcase text-xl text-[#202A36]'></i>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-500 font-bold">الأمتعة</div>
+                          <div className="text-xs font-black text-[#202A36]">2x 23kg</div>
+                        </div>
+                      </div>
+                      <div className="rounded-2xl bg-white/40 backdrop-blur-md border border-white/50 p-3 shadow-sm flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-white/60 flex items-center justify-center shadow-inner">
+                          <i className='bx bx-money text-xl text-[#202A36]'></i>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-500 font-bold">الإجمالي</div>
+                          <div className="text-xs font-black text-[#202A36]">$450.00</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Quick Form */}
+                    <form className="space-y-4 pt-2" onSubmit={(e) => e.preventDefault()}>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-bold text-gray-800 mb-1.5 drop-shadow-sm">الاسم الكامل للمسافر الرئيسي</label>
+                          <input type="text" className="w-full rounded-xl border border-white/50 bg-white/40 backdrop-blur-md p-3.5 outline-none focus:bg-white/70 focus:ring-2 focus:ring-[#202A36] transition-all shadow-sm placeholder:text-gray-600 font-medium text-sm" placeholder="أدخل اسمك الكامل كما في الجواز" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-800 mb-1.5 drop-shadow-sm">رقم الهاتف</label>
+                          <input type="tel" className="w-full rounded-xl border border-white/50 bg-white/40 backdrop-blur-md p-3.5 outline-none focus:bg-white/70 focus:ring-2 focus:ring-[#202A36] transition-all shadow-sm placeholder:text-gray-600 font-medium text-sm" placeholder="+967 ..." />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-800 mb-1.5 drop-shadow-sm">البريد الإلكتروني</label>
+                          <input type="email" className="w-full rounded-xl border border-white/50 bg-white/40 backdrop-blur-md p-3.5 outline-none focus:bg-white/70 focus:ring-2 focus:ring-[#202A36] transition-all shadow-sm placeholder:text-gray-600 font-medium text-sm" placeholder="example@email.com" />
+                        </div>
+                      </div>
+                      
+                      <div className="pt-4">
+                        <button className="w-full rounded-xl bg-[#202A36] px-4 py-4 font-bold text-white transition-all hover:bg-black hover:shadow-lg active:scale-[0.98] text-base">
+                          متابعة الحجز
+                        </button>
+                      </div>
+                      <p className="text-center text-[11px] text-gray-800 mt-4 drop-shadow-sm font-bold">
+                        بضغطك على متابعة، فإنك توافق على الشروط والأحكام الخاصة بسبأ للطيران.
+                      </p>
+                    </form>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
 
           </div>
