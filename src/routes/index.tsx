@@ -82,18 +82,14 @@ const statusLabel = (s: string) => {
 
 const ARAB_AIRLINES = [
   { iata: "IY", name: "سبأ للطيران",         flag: "🇾🇪" },
-  { iata: "EK", name: "طيران الإمارات",       flag: "🇦🇪" },
-  { iata: "EY", name: "الاتحاد للطيران",     flag: "🇦🇪" },
-  { iata: "FZ", name: "فلاي دبي",            flag: "🇦🇪" },
-  { iata: "G9", name: "العربية للطيران",      flag: "🇦🇪" },
-  { iata: "QR", name: "القطرية",              flag: "🇶🇦" },
   { iata: "SV", name: "الخطوط السعودية",     flag: "🇸🇦" },
   { iata: "XY", name: "فلاي ناس",            flag: "🇸🇦" },
   { iata: "WY", name: "عُمان للطيران",        flag: "🇴🇲" },
+  { iata: "MS", name: "مصر للطيران",         flag: "🇪🇬" },
+  { iata: "QR", name: "القطرية",              flag: "🇶🇦" },
   { iata: "GF", name: "طيران الخليج",        flag: "🇧🇭" },
   { iata: "KU", name: "الخطوط الكويتية",    flag: "🇰🇼" },
   { iata: "J9", name: "طيران الجزيرة",       flag: "🇰🇼" },
-  { iata: "MS", name: "مصر للطيران",         flag: "🇪🇬" },
   { iata: "RJ", name: "الملكية الأردنية",    flag: "🇯🇴" },
   { iata: "ME", name: "الشرق الأوسط",        flag: "🇱🇧" },
   { iata: "IA", name: "الخطوط العراقية",     flag: "🇮🇶" },
@@ -141,11 +137,8 @@ function FlightTable() {
   return (
     <div className="w-full flex flex-col gap-3" dir="rtl">
 
-      {/* Airline tabs — scrollable */}
-      <div
-        className="flex gap-1.5 overflow-x-auto pb-1"
-        style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" } as React.CSSProperties}
-      >
+      {/* Airline tabs */}
+      <div className="flex flex-wrap gap-1.5 pb-2">
         {ARAB_AIRLINES.map(a => (
           <button
             key={a.iata}
@@ -273,7 +266,7 @@ function FlightTable() {
 
                 {/* Expanded details */}
                 {isSel && (
-                  <div className="px-4 pb-4 pt-1 border-t border-white/40 bg-white/20 grid grid-cols-3 gap-3 text-center">
+                  <div className="px-3 pb-4 pt-2 border-t border-white/40 bg-white/20 grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 text-center">
                     {[
                       ["الارتفاع",      f.alt   ? `${f.alt.toLocaleString()} م` : "---"],
                       ["السرعة",        f.speed ? `${Math.round(f.speed)} كم/س` : "---"],
@@ -301,7 +294,6 @@ function FlightTable() {
 function Index() {
   const [open, setOpen] = useState(false);
   const [scrollY, setScrollY] = useState(0);
-  
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY);
     window.addEventListener("scroll", handleScroll, { passive: true });
@@ -309,8 +301,9 @@ function Index() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const heroOpacity = Math.max(0, 1 - scrollY / 500);
-  const heroTranslateY = scrollY * 0.4;
+  const heroOpacity = 1; 
+  const heroTextOpacity = Math.max(0, 1 - scrollY / 400); 
+  const heroTranslateY = 0; 
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoTimeRef = useRef(0);
@@ -492,7 +485,10 @@ function Index() {
         </div>
 
         {/* Hero Text */}
-        <div className="flex flex-col items-center justify-center px-4 md:px-6 text-center z-20 w-full max-w-5xl mx-auto flex-1 mt-48 md:mt-64">
+        <div 
+          className="flex flex-col items-center justify-center px-4 md:px-6 text-center z-20 w-full max-w-5xl mx-auto flex-1 mt-48 md:mt-64"
+          style={{ opacity: heroTextOpacity }}
+        >
           <h1 className="leading-[1.05] tracking-tight text-[#1a2229]">
             <span className="block text-4xl sm:text-5xl md:text-6xl lg:text-[5.5rem] font-light">
               اكتشف العالم
@@ -539,13 +535,13 @@ function Index() {
                   </button>
                 </DialogTrigger>
                 <DialogContent
-                  className="w-full sm:max-w-3xl bg-white/30 backdrop-blur-3xl border border-white/50 shadow-2xl p-4 sm:p-6"
+                  className="w-full sm:max-w-3xl max-h-[90vh] overflow-y-auto bg-white/80 backdrop-blur-2xl border border-white/60 shadow-[0_8px_32px_rgba(0,0,0,0.10)] rounded-3xl p-5 sm:p-7"
                   dir="rtl"
                 >
-                  <DialogHeader className="pb-4">
+                  <DialogHeader className="pb-4 border-b border-white/50 mb-2">
                     <DialogTitle className="flex items-center gap-3 text-xl font-black" style={{ color: "#202A36" }}>
-                      <img src={logo} className="h-7 w-auto" alt="سبأ" />
-                      جدول رحلات الطيران
+                      <img src={logo} className="h-9 w-auto" alt="سبأ" />
+                      <span>جدول رحلات الطيران</span>
                     </DialogTitle>
                   </DialogHeader>
                   <FlightTable />
@@ -558,18 +554,18 @@ function Index() {
                     احجز الآن
                   </button>
                 </DialogTrigger>
-                <DialogContent className="w-full sm:max-w-lg bg-white/30 backdrop-blur-2xl border border-white/40 shadow-2xl overflow-y-auto" dir="rtl">
-                  <DialogHeader>
+                <DialogContent className="w-full sm:max-w-lg bg-white/80 backdrop-blur-2xl border border-white/60 shadow-[0_8px_32px_rgba(0,0,0,0.10)] rounded-3xl overflow-y-auto max-h-[90vh] p-5 sm:p-7" dir="rtl">
+                  <DialogHeader className="pb-4 border-b border-white/50 mb-2">
                     <DialogTitle className="flex items-center gap-3 text-xl font-black" style={{ color: "#202A36" }}>
-                      <img src={logo} className="h-7 w-auto" alt="سبأ" />
-                      تفاصيل الحجز
+                      <img src={logo} className="h-9 w-auto" alt="سبأ" />
+                      <span>تفاصيل الحجز</span>
                     </DialogTitle>
                   </DialogHeader>
                   
-                  <div className="mt-2 space-y-4">
+                  <div className="mt-1 space-y-4">
                     {/* Flight summary card */}
-                    <div className="rounded-2xl bg-white/40 backdrop-blur-md border border-white/50 p-4 shadow-sm relative overflow-hidden">
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-white/20 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+                    <div className="rounded-2xl bg-white/60 backdrop-blur-md border border-white/50 p-4 shadow-sm relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-white/30 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
                       
                       <div className="flex justify-between items-center mb-4">
                         <span className="bg-[#202A36] text-white text-[10px] px-2.5 py-1 rounded-full font-bold shadow-sm">
@@ -580,70 +576,70 @@ function Index() {
                       
                       <div className="flex items-center justify-between relative">
                         <div className="flex flex-col text-right z-10">
-                          <span className="text-2xl font-black text-[#202A36] drop-shadow-sm">08:30</span>
-                          <span className="text-xs font-bold text-gray-700 mt-0.5">صنعاء (SAH)</span>
+                          <span className="text-2xl font-black text-[#202A36]">08:30</span>
+                          <span className="text-xs font-bold text-gray-600 mt-0.5">صنعاء (SAH)</span>
                         </div>
                         
                         <div className="flex-1 flex flex-col items-center justify-center px-4 relative z-10">
-                          <div className="text-[10px] text-gray-600 font-bold mb-1 bg-white/50 px-2 py-0.5 rounded-full backdrop-blur-sm">2h 45m</div>
+                          <div className="text-[10px] text-gray-500 font-bold mb-1 bg-white/70 px-2 py-0.5 rounded-full">2h 45m</div>
                           <div className="w-full flex items-center">
-                            <div className="w-2 h-2 rounded-full bg-[#202A36] shadow-[0_0_8px_rgba(32,42,54,0.5)]"></div>
-                            <div className="flex-1 border-t-2 border-dashed border-[#202A36]/30"></div>
+                            <div className="w-2 h-2 rounded-full bg-[#202A36]"></div>
+                            <div className="flex-1 border-t-2 border-dashed border-[#202A36]/25"></div>
                             <div className="w-2 h-2 rounded-full border-2 border-[#202A36] bg-white"></div>
                           </div>
                         </div>
                         
                         <div className="flex flex-col text-left z-10">
-                          <span className="text-2xl font-black text-[#202A36] drop-shadow-sm">11:15</span>
-                          <span className="text-xs font-bold text-gray-700 mt-0.5">عمّان (AMM)</span>
+                          <span className="text-2xl font-black text-[#202A36]">11:15</span>
+                          <span className="text-xs font-bold text-gray-600 mt-0.5">عمّان (AMM)</span>
                         </div>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="rounded-2xl bg-white/40 backdrop-blur-md border border-white/50 p-3 shadow-sm flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-white/60 flex items-center justify-center shadow-inner">
+                      <div className="rounded-2xl bg-white/60 backdrop-blur-md border border-white/50 p-3 shadow-sm flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-[#202A36]/8 flex items-center justify-center">
                           <i className='bx bx-briefcase text-xl text-[#202A36]'></i>
                         </div>
                         <div>
-                          <div className="text-[10px] text-gray-500 font-bold">الأمتعة</div>
-                          <div className="text-xs font-black text-[#202A36]">2x 23kg</div>
+                          <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wide">الأمتعة</div>
+                          <div className="text-sm font-black text-[#202A36]">2x 23kg</div>
                         </div>
                       </div>
-                      <div className="rounded-2xl bg-white/40 backdrop-blur-md border border-white/50 p-3 shadow-sm flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-white/60 flex items-center justify-center shadow-inner">
-                          <i className='bx bx-money text-xl text-[#202A36]'></i>
+                      <div className="rounded-2xl bg-white/60 backdrop-blur-md border border-white/50 p-3 shadow-sm flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-[#202A36]/8 flex items-center justify-center">
+                          <i className='bx bx-dollar text-xl text-[#202A36]'></i>
                         </div>
                         <div>
-                          <div className="text-[10px] text-gray-500 font-bold">الإجمالي</div>
-                          <div className="text-xs font-black text-[#202A36]">$450.00</div>
+                          <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wide">الإجمالي</div>
+                          <div className="text-sm font-black text-[#202A36]">$450.00</div>
                         </div>
                       </div>
                     </div>
 
                     {/* Quick Form */}
-                    <form className="space-y-4 pt-2" onSubmit={(e) => e.preventDefault()}>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <form className="space-y-3 pt-1" onSubmit={(e) => e.preventDefault()}>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="sm:col-span-2">
-                          <label className="block text-xs font-bold text-gray-800 mb-1.5 drop-shadow-sm">الاسم الكامل للمسافر الرئيسي</label>
-                          <input type="text" className="w-full rounded-xl border border-white/50 bg-white/40 backdrop-blur-md p-3.5 outline-none focus:bg-white/70 focus:ring-2 focus:ring-[#202A36] transition-all shadow-sm placeholder:text-gray-600 font-medium text-sm" placeholder="أدخل اسمك الكامل كما في الجواز" />
+                          <label className="block text-xs font-bold text-gray-700 mb-1.5">الاسم الكامل</label>
+                          <input type="text" className="w-full rounded-xl border border-white/60 bg-white/60 backdrop-blur-md p-3 outline-none focus:bg-white/90 focus:ring-2 focus:ring-[#202A36]/30 transition-all text-sm font-medium text-[#202A36] placeholder:text-gray-400" placeholder="أدخل اسمك الكامل كما في الجواز" />
                         </div>
                         <div>
-                          <label className="block text-xs font-bold text-gray-800 mb-1.5 drop-shadow-sm">رقم الهاتف</label>
-                          <input type="tel" className="w-full rounded-xl border border-white/50 bg-white/40 backdrop-blur-md p-3.5 outline-none focus:bg-white/70 focus:ring-2 focus:ring-[#202A36] transition-all shadow-sm placeholder:text-gray-600 font-medium text-sm" placeholder="+967 ..." />
+                          <label className="block text-xs font-bold text-gray-700 mb-1.5">رقم الهاتف</label>
+                          <input type="tel" className="w-full rounded-xl border border-white/60 bg-white/60 backdrop-blur-md p-3 outline-none focus:bg-white/90 focus:ring-2 focus:ring-[#202A36]/30 transition-all text-sm font-medium text-[#202A36] placeholder:text-gray-400" placeholder="+967 ..." />
                         </div>
                         <div>
-                          <label className="block text-xs font-bold text-gray-800 mb-1.5 drop-shadow-sm">البريد الإلكتروني</label>
-                          <input type="email" className="w-full rounded-xl border border-white/50 bg-white/40 backdrop-blur-md p-3.5 outline-none focus:bg-white/70 focus:ring-2 focus:ring-[#202A36] transition-all shadow-sm placeholder:text-gray-600 font-medium text-sm" placeholder="example@email.com" />
+                          <label className="block text-xs font-bold text-gray-700 mb-1.5">البريد الإلكتروني</label>
+                          <input type="email" className="w-full rounded-xl border border-white/60 bg-white/60 backdrop-blur-md p-3 outline-none focus:bg-white/90 focus:ring-2 focus:ring-[#202A36]/30 transition-all text-sm font-medium text-[#202A36] placeholder:text-gray-400" placeholder="example@email.com" />
                         </div>
                       </div>
                       
-                      <div className="pt-4">
-                        <button className="w-full rounded-xl bg-[#202A36] px-4 py-4 font-bold text-white transition-all hover:bg-black hover:shadow-lg active:scale-[0.98] text-base">
+                      <div className="pt-3">
+                        <button className="w-full rounded-xl bg-[#202A36] px-4 py-3.5 font-bold text-white transition-all hover:bg-black hover:shadow-lg active:scale-[0.98] text-sm">
                           متابعة الحجز
                         </button>
                       </div>
-                      <p className="text-center text-[11px] text-gray-800 mt-4 drop-shadow-sm font-bold">
+                      <p className="text-center text-[10px] text-gray-500 font-medium">
                         بضغطك على متابعة، فإنك توافق على الشروط والأحكام الخاصة بسبأ للطيران.
                       </p>
                     </form>
